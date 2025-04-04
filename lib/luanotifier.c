@@ -3,11 +3,14 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+#include "linux/printk.h"
+#include "linux/vt.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/keyboard.h>
 #include <linux/netdevice.h>
+#include <linux/vt_kern.h>
 
 #include <lua.h>
 #include <lualib.h>
@@ -42,6 +45,15 @@ static int luanotifier_netdevice_handler(lua_State *L, void *data)
 
 	lua_pushstring(L, dev->name);
 	return 1;
+}
+
+static int luanotifier_vt_handler(lua_State *L, void *data)
+{
+	struct vt_notifier_param *param = (struct vt_notifier_param *)data;
+
+	lua_pushinteger(L, (lua_Integer)param->c);
+	lua_pushinteger(L, (lua_Integer)param->vc->vc_num);
+	return 2;
 }
 
 static int luanotifier_handler(lua_State *L, luanotifier_t *notifier, unsigned long event, void *data)
@@ -93,6 +105,7 @@ static int luanotifier_##name(lua_State *L)					\
 
 LUANOTIFIER_NEWCHAIN(keyboard);
 LUANOTIFIER_NEWCHAIN(netdevice);
+LUANOTIFIER_NEWCHAIN(vt);
 
 static void luanotifier_release(void *private)
 {
@@ -147,6 +160,7 @@ static int luanotifier_delete(lua_State *L)
 static const luaL_Reg luanotifier_lib[] = {
 	{"keyboard", luanotifier_keyboard},
 	{"netdevice", luanotifier_netdevice},
+	{"console", luanotifier_vt},
 	{NULL, NULL}
 };
 
@@ -161,6 +175,12 @@ static const lunatik_reg_t luanotifier_notify[] = {
 	{"OK", NOTIFY_OK},
 	{"BAD", NOTIFY_BAD},
 	{"STOP", NOTIFY_STOP},
+	{NULL, 0}
+};
+
+static const lunatik_reg_t luanotifier_con[] = {
+	{"WRITE", VT_WRITE},
+	{"UPDATE", VT_UPDATE},
 	{NULL, 0}
 };
 
@@ -227,6 +247,7 @@ static const lunatik_namespace_t luanotifier_flags[] = {
 	{"notify", luanotifier_notify},
 	{"kbd", luanotifier_kbd},
 	{"netdev", luanotifier_netdev},
+	{"con", luanotifier_con},
 	{NULL, NULL}
 };
 
@@ -244,6 +265,8 @@ static int luanotifier_new(lua_State *L, luanotifier_register_t register_fn, lua
 	luanotifier_t *notifier;
 
 	luaL_checktype(L, 1, LUA_TFUNCTION); /* callback */
+
+	printk("register success\n");
 
 	object = lunatik_newobject(L, &luanotifier_class, sizeof(luanotifier_t));
 	notifier = (luanotifier_t *)object->private;
