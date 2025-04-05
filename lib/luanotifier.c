@@ -3,8 +3,6 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
-#include "linux/printk.h"
-#include "linux/vt.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/module.h>
 #include <linux/version.h>
@@ -51,8 +49,8 @@ static int luanotifier_vt_handler(lua_State *L, void *data)
 {
 	struct vt_notifier_param *param = (struct vt_notifier_param *)data;
 
-	lua_pushinteger(L, (lua_Integer)param->c);
-	lua_pushinteger(L, (lua_Integer)param->vc->vc_num);
+	lua_pushinteger(L, (lua_Integer)(param->c));
+	lua_pushinteger(L, (lua_Integer)(param->vc->vc_num));
 	return 2;
 }
 
@@ -158,9 +156,9 @@ static int luanotifier_delete(lua_State *L)
 }
 
 static const luaL_Reg luanotifier_lib[] = {
+	{"vt", luanotifier_vt},
 	{"keyboard", luanotifier_keyboard},
 	{"netdevice", luanotifier_netdevice},
-	{"console", luanotifier_vt},
 	{NULL, NULL}
 };
 
@@ -265,8 +263,6 @@ static int luanotifier_new(lua_State *L, luanotifier_register_t register_fn, lua
 	luanotifier_t *notifier;
 
 	luaL_checktype(L, 1, LUA_TFUNCTION); /* callback */
-
-	printk("register success\n");
 
 	object = lunatik_newobject(L, &luanotifier_class, sizeof(luanotifier_t));
 	notifier = (luanotifier_t *)object->private;
