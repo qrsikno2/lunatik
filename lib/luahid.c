@@ -83,14 +83,14 @@ static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
 {
 	/* Check if the 'id_table' field exists and is a table */
 	if (lua_getfield(L, idx, "id_table") != LUA_TTABLE) {
-		lua_pop(L, 1); 
-		return hid_table; 
+		lua_pop(L, 1);
+		return luahid_table;
 	}
 
 	size_t len = luaL_len(L, -1);
 	if (len == 0) {
-		lua_pop(L, 1); 
-		return hid_table; 
+		lua_pop(L, 1);
+		return luahid_table;
 	}
 
 	struct hid_device_id *user_table = lunatik_checkalloc(L, sizeof(struct hid_device_id) * (len + 1));
@@ -112,7 +112,7 @@ static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
 		       i, user_table[i].bus, user_table[i].group,
 		       user_table[i].vendor, user_table[i].product);
 
-		lua_pop(L, 1); /* Pop the inner table */
+		lua_pop(L, 1);
 	}
 
 	/* Add the null terminator entry */
@@ -127,16 +127,16 @@ static int luahid_register(lua_State *L)
 	luaL_checktype(L, 1, LUA_TTABLE);
 
 	lunatik_object_t *object = lunatik_newobject(L, &luahid_class, sizeof(luahid_t));
-	luahid_t *hid = (luahid_t *)object->private;
+	luahid_t *hidvar = (luahid_t *)object->private;
 
-	struct hid_driver *user_driver = &(hid->driver);
+	struct hid_driver *user_driver = &(hidvar->driver);
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
 	user_driver->id_table = luahid_parse_id_table(L, 1);
 	user_driver->probe = luahid_generic_probe;
 
-	lunatik_setruntime(L, hid, hid);
-	lunatik_getobject(hid->runtime);
+	lunatik_setruntime(L, hid, hidvar);
+	lunatik_getobject(hidvar->runtime);
 
 	int ret = __hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME);
 	if (ret) {
