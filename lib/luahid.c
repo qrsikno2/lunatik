@@ -15,9 +15,9 @@ typedef struct luahid_s {
 } luahid_t;
 
 typedef struct luadata_s {
-	__u8 *ptr;
+	char *ptr;
 	size_t size;
-	bool sleep;
+	uint8_t opt;
 } luadata_t;
 
 static int luahid_generic_probe(struct hid_device *hdev,
