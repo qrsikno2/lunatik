@@ -12,11 +12,30 @@ typedef struct luahid_s {
 	struct hid_driver driver;
 } luahid_t;
 
+/*
+ * kernel codes copied from drivers/hid/hid-generic.c
+ * links: https://elixir.bootlin.com/linux/v6.13.7/source/drivers/hid/hid-generic.c
+ */
+static int luahid_generic_probe(struct hid_device *hdev,
+			     const struct hid_device_id *id)
+{
+	int ret;
+
+	hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
+
+	ret = hid_parse(hdev);
+	if (ret)
+		return ret;
+
+	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+}
+
 static const struct hid_device_id luahid_table[] = {
 	{HID_DEVICE(HID_BUS_ANY, HID_GROUP_ANY, HID_ANY_ID, HID_ANY_ID)},
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, luahid_table);
+
 
 static void luahid_release(void *private)
 {
@@ -58,6 +77,7 @@ static int luahid_register(lua_State *L)
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
 	user_driver->id_table = luahid_table;
+	user_driver->probe = luahid_generic_probe;
 
 	lunatik_setruntime(L, hid, hid);
 	lunatik_getobject(hid->runtime);
