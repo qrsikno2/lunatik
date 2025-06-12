@@ -26,6 +26,11 @@ typedef struct luahid_s {
 	lunatik_object_t *fixed_report_descriptor;
 } luahid_t;
 
+typedef struct luadata_s {
+	char *ptr;
+	size_t size;
+	uint8_t opt;
+} luadata_t;
 /*
  * kernel codes copied & revised from drivers/hid/hid-generic.c
  * links: https://elixir.bootlin.com/linux/v6.13.7/source/drivers/hid/hid-generic.c 
