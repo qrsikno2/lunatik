@@ -21,6 +21,7 @@
 static int lualinux_random(lua_State *L)
 {
 	lua_Integer low, up, rand;
+	error syntax;
 
 	switch (lua_gettop(L)) {  /* check number of arguments */
 	case 0: {  /* no arguments */
