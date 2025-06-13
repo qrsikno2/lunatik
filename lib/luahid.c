@@ -26,7 +26,7 @@ typedef struct luahid_s {
 
 /*
  * kernel codes copied from drivers/hid/hid-generic.c
- * links: https://elixir.bootlin.com/linux/v6.13.7/source/drivers/hid/hid-generic.c 
+ * links: https://elixir.bootlin.com/linux/v6.13.7/source/drivers/hid/hid-generic.c
  */
 static int hid_generic_probe(struct hid_device *hdev,
 			     const struct hid_device_id *id)
@@ -54,7 +54,7 @@ MODULE_DEVICE_TABLE(hid, hid_table);
  */
 static bool hid_match(struct hid_device *hdev,
 			      bool ignore_special_driver) {
-	/* 
+	/*
 	 * this is a device need to be ignored and processed by the
 	 * generic driver
 	 */
@@ -117,7 +117,7 @@ static int luahid_register(lua_State *L)
 	if (ret) {
 		lunatik_unregisterobject(L, object);
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
-	} 
+	}
 	lunatik_setruntime(L, hid, hid);
 	lunatik_getobject(hid->runtime);
 	return 1; /* object */
