@@ -202,14 +202,23 @@ err:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
 static const __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned int *size) {
+#else
+static __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned int *size) {
+#endif
 	struct hid_driver *driver = hdev->driver;
 	luahid_t *hidvar = container_of(driver, luahid_t, driver);
 	__u8* ret_ptr = buf;
 	int ret;
 
-	if (!driver || !driver->report_fixup || !hidvar->runtime) {
+	if (!driver || !driver->report_fixup) {
 		pr_warn("No report_fixup callback defined for driver %s\n", driver ? driver->name : "unknown");
+		return buf; /* No fixup needed */
+	}
+
+	if (!hidvar->runtime) {
+		pr_warn("No lunatik runtime for the driver");
 		return buf; /* No fixup needed */
 	}
 
