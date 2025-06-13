@@ -264,14 +264,15 @@ static int luahid_register(lua_State *L)
 	user_driver->report_fixup = luahid_report_fixup;
 
 	lunatik_registerobject(L, 1, object);
+	lunatik_setruntime(L, hid, hidvar);
+	lunatik_getobject(hidvar->runtime);
 
 	int ret = __hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME);
 	if (ret) {
 		lunatik_unregisterobject(L, object);
+		lunatik_putobject(hidvar->runtime);
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
 	}
-	lunatik_setruntime(L, hid, hidvar);
-	lunatik_getobject(hidvar->runtime);
 	return 1; /* object */
 }
 
