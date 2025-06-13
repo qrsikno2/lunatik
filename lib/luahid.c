@@ -169,7 +169,7 @@ static void luahid_push_device_info_table(lua_State *L, struct hid_device *hdev)
 
 static int luahid_report_fixup_handler(lua_State *L, luahid_t *hidvar,
 									   struct hid_device *hdev, __u8 *buf, unsigned int *size,
-									   __u8* ret_ptr) {
+									   __u8** ret_ptr) {
 	int ret = -1;
 
 	if (lunatik_getregistry(L, hidvar) != LUA_TTABLE) {
@@ -208,7 +208,7 @@ static int luahid_report_fixup_handler(lua_State *L, luahid_t *hidvar,
 
 		luadata_t *data = (luadata_t *)returned_object->private;
 		*size= data->size;
-		ret_ptr = data->ptr;
+		*ret_ptr = data->ptr;
 	}
 
 	return 0;
@@ -236,7 +236,7 @@ static __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned in
 		return buf; /* No fixup needed */
 	}
 
-	lunatik_run(hidvar->runtime, luahid_report_fixup_handler, ret, hidvar, hdev, buf, size, ret_ptr);
+	lunatik_run(hidvar->runtime, luahid_report_fixup_handler, ret, hidvar, hdev, buf, size, &ret_ptr);
 
 	/* if error occured, returns the original buffer */
 	if (ret)
