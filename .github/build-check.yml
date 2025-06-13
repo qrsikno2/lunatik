@@ -1,0 +1,43 @@
+# 工作流的名称，会显示在 GitHub 的 Actions 页面上
+name: Lunatik CI Build & Install
+
+on:
+  # 在向 master 或 main 分支提交 Pull Request 时触发
+  pull_request:
+    branches: [ "master", "main" ]
+  # 在任何分支上执行 push 操作时触发
+  push:
+    branches-ignore: [ "master", "main" ]
+
+# 工作流包含的任务 (jobs)
+jobs:
+  # 我们定义一个名为 "build" 的任务
+  build:
+    # 指定运行这个任务的虚拟机环境，Ubuntu 最新版很适合 C 项目
+    runs-on: ubuntu-latest
+
+    steps:
+      # 第一步：拉取仓库代码
+      # 这相当于 `git clone` 命令。
+      # `submodules: 'recursive'` 等同于 `git clone` 的 `--recurse-submodules` 参数。
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+
+      # 第二步：安装所有依赖项
+      # 这对应你的 `sudo apt install` 步骤。
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git build-essential lua5.4 dwarves clang llvm libelf-dev linux-headers-$(uname -r) linux-tools-common linux-tools-$(uname -r) pkg-config libpcap-dev m4
+
+      # 第三步：编译项目
+      # 这对应你的 `make` 命令。
+      - name: Compile the project
+        run: make
+
+      # 第四步：安装项目
+      # 这对应你的 `sudo make install` 命令，用来验证安装脚本是否能成功运行。
+      - name: Install the project
+        run: sudo make install
