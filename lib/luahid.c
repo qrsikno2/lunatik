@@ -251,6 +251,7 @@ static int luahid_register(lua_State *L)
 	int ret = __hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME);
 	if (ret) {
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
+		lunatik_putobject(hidvar->runtime);
 	}
 
 	lunatik_registerobject(L, 1, object);
