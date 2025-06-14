@@ -3,6 +3,7 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+#include "linux/printk.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/hid.h>
 #include <lunatik.h>
@@ -211,11 +212,6 @@ static __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned in
 	luahid_t *hidvar = container_of(driver, luahid_t, driver);
 	__u8* ret_ptr = buf;
 	int ret;
-
-	if (!driver || !driver->report_fixup) {
-		pr_warn("No report_fixup callback defined for driver %s\n", driver ? driver->name : "unknown");
-		return buf; /* No fixup needed */
-	}
 
 	if (!hidvar->runtime) {
 		pr_warn("No lunatik runtime for the driver");
