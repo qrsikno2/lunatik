@@ -48,23 +48,6 @@ static const struct hid_device_id hid_table[] = {
 };
 MODULE_DEVICE_TABLE(hid, hid_table);
 
-/*
- * This function is called when matching a hid driver
- * A function to merge user-defined match's logic with the kernel's
- */
-static bool hid_match(struct hid_device *hdev,
-			      bool ignore_special_driver) {
-	/*
-	 * this is a device need to be ignored and processed by the
-	 * generic driver
-	 */
-	if (ignore_special_driver)
-		return false;
-
-	return hid_match_id(hdev, hid_table);
-}
-
-
 static void luahid_release(void *private)
 {
 	luahid_t *hid = (luahid_t *)private;
@@ -108,18 +91,18 @@ static int luahid_register(lua_State *L)
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
 	user_driver->id_table = hid_table;
-	user_driver->match = hid_match;
+	user_driver->match = NULL;
 	user_driver->probe = hid_generic_probe;
 
 	lunatik_registerobject(L, 1, object);
+	lunatik_setruntime(L, hid, hid);
+	lunatik_getobject(hid->runtime);
 
 	int ret = __hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME);
 	if (ret) {
 		lunatik_unregisterobject(L, object);
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
 	}
-	lunatik_setruntime(L, hid, hid);
-	lunatik_getobject(hid->runtime);
 	return 1; /* object */
 }
 
