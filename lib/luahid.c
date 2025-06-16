@@ -6,6 +6,7 @@
 #include "linux/printk.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/hid.h>
+#include <linux/version.h>
 #include <lunatik.h>
 #include "luadata.h"
 
@@ -249,7 +250,6 @@ static int luahid_register(lua_State *L)
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
 		lunatik_putobject(hidvar->runtime);
 	}
-
 	lunatik_registerobject(L, 1, object);
 	return 1; /* object */
 }
