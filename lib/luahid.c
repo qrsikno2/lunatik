@@ -47,6 +47,7 @@ static void luahid_release(void *private)
 	if (hid) {
 		hid_unregister_driver(&hid->driver);
 		lunatik_putobject(hid->runtime);
+		lunatik_free(hid->driver.id_table);
 		lunatik_free(hid->driver.name);
 	}
 }
