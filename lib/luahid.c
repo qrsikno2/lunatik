@@ -3,6 +3,8 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+#include "linux/printk.h"
+#include "lunatik_conf.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/hid.h>
 #include <linux/version.h>
@@ -21,10 +23,70 @@ typedef struct luadata_s {
 	uint8_t opt;
 } luadata_t;
 
+static void luahid_push_device_info_table(lua_State *L, struct hid_device *hdev)
+{
+    lua_newtable(L);
+
+    lua_pushinteger(L, hdev->bus);
+    lua_setfield(L, -2, "bus");
+
+    lua_pushinteger(L, hdev->group);
+    lua_setfield(L, -2, "group");
+
+    lua_pushinteger(L, hdev->vendor);
+    lua_setfield(L, -2, "vendor");
+
+    lua_pushinteger(L, hdev->product);
+    lua_setfield(L, -2, "product");
+
+    lua_pushinteger(L, hdev->version);
+    lua_setfield(L, -2, "version");
+
+    lua_pushstring(L, hdev->name);
+    lua_setfield(L, -2, "name");
+}
+
+static int luahid_match_handler(lua_State *L, luahid_t *hidvar,
+								struct hid_device *hdev) {
+	if (lunatik_getregistry(L, hidvar) != LUA_TTABLE) {
+		pr_err("luahid: could not find ops table for hid device\n");
+		goto err;
+	}
+	if (lua_getfield(L, -1, "match") != LUA_TFUNCTION) {
+		pr_err("luahid: match operation not defined\n");
+		goto err;
+	}
+
+	luahid_push_device_info_table(L, hdev);
+	if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+		pr_err("luahid: error calling 'match': %s\n", lua_tostring(L, -1));
+		goto err;
+	}
+
+	int ret = lua_toboolean(L, -1);
+	return ret == 1 ? 0 : -ENODEV;
+err:
+	return -ENODEV;
+}
+
 static int luahid_probe(struct hid_device *hdev,
 			     const struct hid_device_id *id)
 {
 	int ret;
+	struct hid_driver *driver = hdev->driver;
+	luahid_t *hidvar = container_of(driver, luahid_t, driver);
+
+	if (hidvar->runtime == NULL) {
+		pr_err("No lunatik runtime for the driver");
+		return -ENODEV;
+	}
+
+	lunatik_run(hidvar->runtime, luahid_match_handler, ret, hidvar, hdev);
+
+	if (ret) {
+		pr_err("Match failed with return value: %d", ret);
+		return -ENODEV;
+	}
 
 	hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
 
@@ -132,28 +194,6 @@ static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
 	return user_table;
 }
 
-static void luahid_push_device_info_table(lua_State *L, struct hid_device *hdev)
-{
-    lua_newtable(L);
-
-    lua_pushinteger(L, hdev->bus);
-    lua_setfield(L, -2, "bus");
-
-    lua_pushinteger(L, hdev->group);
-    lua_setfield(L, -2, "group");
-
-    lua_pushinteger(L, hdev->vendor);
-    lua_setfield(L, -2, "vendor");
-
-    lua_pushinteger(L, hdev->product);
-    lua_setfield(L, -2, "product");
-
-    lua_pushinteger(L, hdev->version);
-    lua_setfield(L, -2, "version");
-
-    lua_pushstring(L, hdev->name);
-    lua_setfield(L, -2, "name");
-}
 
 static int luahid_report_fixup_handler(lua_State *L, luahid_t *hidvar,
 									   struct hid_device *hdev, __u8 *buf, unsigned int *size,
@@ -228,10 +268,6 @@ static __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned in
 		return ret_ptr;
 }
 
-static bool luahid_match(struct hid_device *hdev, bool ignore_special_driver) {
-	return false;
-}
-
 static int luahid_register(lua_State *L)
 {
 	luaL_checktype(L, 1, LUA_TTABLE);
@@ -245,7 +281,6 @@ static int luahid_register(lua_State *L)
 	user_driver->id_table = luahid_parse_id_table(L, 1);
 	user_driver->probe = luahid_probe;
 	user_driver->report_fixup = luahid_report_fixup;
-	user_driver->match = luahid_match;
 
 	lunatik_setruntime(L, hid, hidvar);
 	lunatik_getobject(hidvar->runtime);
