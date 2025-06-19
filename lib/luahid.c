@@ -228,6 +228,10 @@ static __u8* luahid_report_fixup(struct hid_device *hdev, __u8* buf, unsigned in
 		return ret_ptr;
 }
 
+static bool luahid_match(struct hid_device *hdev, bool ignore_special_driver) {
+	return false;
+}
+
 static int luahid_register(lua_State *L)
 {
 	luaL_checktype(L, 1, LUA_TTABLE);
@@ -241,6 +245,7 @@ static int luahid_register(lua_State *L)
 	user_driver->id_table = luahid_parse_id_table(L, 1);
 	user_driver->probe = luahid_probe;
 	user_driver->report_fixup = luahid_report_fixup;
+	user_driver->match = luahid_match;
 
 	lunatik_setruntime(L, hid, hidvar);
 	lunatik_getobject(hidvar->runtime);
