@@ -21,7 +21,7 @@ typedef struct luadata_s {
 	uint8_t opt;
 } luadata_t;
 
-static int luahid_generic_probe(struct hid_device *hdev,
+static int luahid_probe(struct hid_device *hdev,
 			     const struct hid_device_id *id)
 {
 	int ret;
@@ -239,7 +239,7 @@ static int luahid_register(lua_State *L)
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
 	user_driver->id_table = luahid_parse_id_table(L, 1);
-	user_driver->probe = luahid_generic_probe;
+	user_driver->probe = luahid_probe;
 	user_driver->report_fixup = luahid_report_fixup;
 
 	lunatik_setruntime(L, hid, hidvar);
