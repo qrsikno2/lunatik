@@ -55,7 +55,7 @@ static const lunatik_class_t luahid_class = {
 /*
  * Helper function to safely get an integer field from a Lua table.
  */
-static lua_Integer get_int_field(lua_State *L, int table_idx, const char *field_name, lua_Integer default_val)
+static lua_Integer luahid_get_int_field(lua_State *L, int table_idx, const char *field_name, lua_Integer default_val)
 {
 	lua_Integer result = default_val;
 	if (lua_getfield(L, table_idx, field_name) == LUA_TNUMBER)
@@ -85,11 +85,11 @@ static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
 			luaL_error(L, "id_table entry #%zu is not a table", i + 1);
 		}
 
-		user_table[i].bus = get_int_field(L, -1, "bus", HID_BUS_ANY);
-		user_table[i].group = get_int_field(L, -1, "group", HID_GROUP_ANY);
-		user_table[i].vendor = get_int_field(L, -1, "vendor", HID_ANY_ID);
-		user_table[i].product = get_int_field(L, -1, "product", HID_ANY_ID);
-		user_table[i].driver_data = get_int_field(L, -1, "driver_data", 0);
+		user_table[i].bus = luahid_get_int_field(L, -1, "bus", HID_BUS_ANY);
+		user_table[i].group = luahid_get_int_field(L, -1, "group", HID_GROUP_ANY);
+		user_table[i].vendor = luahid_get_int_field(L, -1, "vendor", HID_ANY_ID);
+		user_table[i].product = luahid_get_int_field(L, -1, "product", HID_ANY_ID);
+		user_table[i].driver_data = luahid_get_int_field(L, -1, "driver_data", 0);
 
 		lua_pop(L, 1);
 	}
