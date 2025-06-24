@@ -3,9 +3,19 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+/***
+* Forwarding Information Base (FIB) rules.
+* This library allows Lua scripts to add and delete FIB rules, similar to the
+* user-space `ip rule add` and `ip rule del` commands.
+* FIB rules are used to influence routing decisions by selecting different
+* routing tables based on various criteria.
+*
+* @module fib
+*/
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include <net/fib_rules.h>
 
 #include <lua.h>
@@ -21,7 +31,11 @@
 
 typedef struct luafib_rule_s {
 	struct net *net;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	int (*command)(struct net *, struct sk_buff *, struct nlmsghdr *, struct netlink_ext_ack *, bool);
+#else
 	int (*command)(struct sk_buff *, struct nlmsghdr *, struct netlink_ext_ack *);
+#endif
 	u32 table;
 	u32 priority;
 } luafib_rule_t;
@@ -51,12 +65,22 @@ static int luafib_nl_rule(luafib_rule_t *rule)
 	nlmsg_end(skb, nlh);
 
 	skb->sk = rule->net->rtnl;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+	ret = rule->command(rule->net, skb, nlh, NULL, true);
+#else
 	ret = rule->command(skb, nlh, NULL);
+#endif
 free:
 	nlmsg_free(skb);
 out:
 	return ret;
 }
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+#define LUAFIB_RULECOMMAND(op) fib_##op
+#else
+#define LUAFIB_RULECOMMAND(op) fib_nl_##op
+#endif
 
 #define LUAFIB_OPRULE(op) 				\
 static int luafib_##op(lua_State *L)			\
@@ -64,7 +88,7 @@ static int luafib_##op(lua_State *L)			\
 	luafib_rule_t rule;				\
 							\
 	rule.net = &init_net;				\
-	rule.command = fib_nl_##op;			\
+	rule.command = LUAFIB_RULECOMMAND(op);		\
 	rule.table = (u32)luaL_checkinteger(L, 1);	\
 	rule.priority = (u32)luaL_checkinteger(L, 2);	\
 							\
@@ -74,7 +98,40 @@ static int luafib_##op(lua_State *L)			\
 	return 0;					\
 }
 
+/***
+* Adds a new FIB rule.
+* This function binds the kernel `fib_nl_newrule` API. It creates a new FIB rule
+* that directs lookups to the specified routing `table` for packets matching
+* this rule's `priority`.
+*
+* Note: This function creates a relatively simple rule. The rule is always for
+* IPv4 (`AF_INET`), the action is always to look up the specified `table`
+* (`FR_ACT_TO_TBL`), and the protocol is set to `RTPROT_KERNEL`. It does not
+* support specifying other match conditions (e.g., source/destination IP, interface, fwmark).
+*
+* @function newrule
+* @tparam integer table The routing table identifier (e.g., 254 for main, 255 for local).
+* @tparam integer priority The priority of the rule. Lower numbers have higher precedence.
+* @treturn nil
+* @raise Error if the rule cannot be added (e.g., due to kernel error, invalid parameters).
+* @usage
+*   fib.newrule(100, 10000) -- Add a rule with priority 10000 to lookup table 100
+*/
 LUAFIB_OPRULE(newrule);
+
+/***
+* Deletes an existing FIB rule.
+* This function binds the kernel `fib_nl_delrule` API. It removes a FIB rule
+* that matches the specified routing `table` and `priority`.
+*
+* @function delrule
+* @tparam integer table The routing table identifier of the rule to delete.
+* @tparam integer priority The priority of the rule to delete.
+* @treturn nil
+* @raise Error if the rule cannot be deleted (e.g., rule not found, kernel error).
+* @usage
+*   fib.delrule(100, 10000) -- Delete the rule with priority 10000 that looks up table 100
+*/
 LUAFIB_OPRULE(delrule);
 
 static const luaL_Reg luafib_lib[] = {

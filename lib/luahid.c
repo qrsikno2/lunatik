@@ -3,58 +3,34 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+#include <string.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-#include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/version.h>
-#include <linux/slab.h>
-#include <linux/limits.h>
-#include <asm/byteorder.h>
-
 #include <linux/hid.h>
-
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
-
 #include <lunatik.h>
 
 typedef struct luahid_s {
 	lunatik_object_t *runtime;
 	struct hid_driver driver;
+	bool registered;
 } luahid_t;
 
-/*
- * kernel codes copied from drivers/hid/hid-generic.c
- * links: https://elixir.bootlin.com/linux/v6.13.7/source/drivers/hid/hid-generic.c
- */
-static int hid_generic_probe(struct hid_device *hdev,
-			     const struct hid_device_id *id)
-{
-	int ret;
-
-	hdev->quirks |= HID_QUIRK_INPUT_PER_APP;
-
-	ret = hid_parse(hdev);
-	if (ret)
-		return ret;
-
-	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
-}
-
-static const struct hid_device_id hid_table[] = {
+static const struct hid_device_id luahid_table[] = {
 	{HID_DEVICE(HID_BUS_ANY, HID_GROUP_ANY, HID_ANY_ID, HID_ANY_ID)},
 	{ }
 };
-MODULE_DEVICE_TABLE(hid, hid_table);
+MODULE_DEVICE_TABLE(hid, luahid_table);
 
 static void luahid_release(void *private)
 {
 	luahid_t *hid = (luahid_t *)private;
-	if (hid) {
+	if (hid->registered)
 		hid_unregister_driver(&hid->driver);
+	if (hid->runtime != NULL)
 		lunatik_putobject(hid->runtime);
-	}
+	if (hid->driver.id_table != NULL)
+		lunatik_free(hid->driver.id_table);
+	if (hid->driver.name != NULL)
+		lunatik_free(hid->driver.name);
 }
 
 static int luahid_register(lua_State *L);
@@ -76,33 +52,75 @@ static const lunatik_class_t luahid_class = {
 	.sleep = true,
 };
 
+/*
+ * Helper function to safely get an integer field from a Lua table.
+ */
+static lua_Integer get_int_field(lua_State *L, int table_idx, const char *field_name, lua_Integer default_val)
+{
+	lua_Integer result = default_val;
+	if (lua_getfield(L, table_idx, field_name) == LUA_TNUMBER)
+		result = lua_tointeger(L, -1);
+	lua_pop(L, 1);
+	return result;
+}
+
+static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
+{
+	if (lua_getfield(L, idx, "id_table") != LUA_TTABLE) {
+		lua_pop(L, 1);
+		return luahid_table;
+	}
+
+	size_t len = luaL_len(L, -1);
+	if (len == 0) {
+		lua_pop(L, 1);
+		return luahid_table;
+	}
+
+	struct hid_device_id *user_table = lunatik_checkalloc(L, sizeof(struct hid_device_id) * (len + 1));
+
+	for (size_t i = 0; i < len; i++) {
+		if (lua_geti(L, -1, i + 1) != LUA_TTABLE) {
+			lunatik_free(user_table);
+			luaL_error(L, "id_table entry #%zu is not a table", i + 1);
+		}
+
+		user_table[i].bus = get_int_field(L, -1, "bus", HID_BUS_ANY);
+		user_table[i].group = get_int_field(L, -1, "group", HID_GROUP_ANY);
+		user_table[i].vendor = get_int_field(L, -1, "vendor", HID_ANY_ID);
+		user_table[i].product = get_int_field(L, -1, "product", HID_ANY_ID);
+		user_table[i].driver_data = get_int_field(L, -1, "driver_data", 0);
+
+		lua_pop(L, 1);
+	}
+
+	memset(&user_table[len], 0, sizeof(struct hid_device_id));
+	lua_pop(L, 1);
+
+	return user_table;
+}
 
 static int luahid_register(lua_State *L)
 {
-	luaL_checktype(L, 1, LUA_TTABLE); /* assure that is a driver */
+	luaL_checktype(L, 1, LUA_TTABLE);
 
 	lunatik_object_t *object = lunatik_newobject(L, &luahid_class, sizeof(luahid_t));
-	luahid_t *hid = (luahid_t *)object->private;
+	luahid_t *hidvar = (luahid_t *)object->private;
+	memset(hidvar, 0, sizeof(luahid_t));
 
-	/*
-	 * configure the driver's properties & callbacks
-	 */
-	struct hid_driver *user_driver = &(hid->driver);
+	struct hid_driver *user_driver = &(hidvar->driver);
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
-	user_driver->id_table = hid_table;
-	user_driver->match = NULL;
-	user_driver->probe = hid_generic_probe;
+	user_driver->id_table = luahid_parse_id_table(L, 1);
 
-	lunatik_registerobject(L, 1, object);
-	lunatik_setruntime(L, hid, hid);
-	lunatik_getobject(hid->runtime);
+	lunatik_setruntime(L, hid, hidvar);
+	lunatik_getobject(hidvar->runtime);
 
-	int ret = __hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME);
-	if (ret) {
-		lunatik_unregisterobject(L, object);
+	if (__hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME) != 0)
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
-	}
+
+	hidvar->registered = true;
+	lunatik_registerobject(L, 1, object);
 	return 1; /* object */
 }
 
@@ -121,3 +139,4 @@ module_init(luahid_init);
 module_exit(luahid_exit);
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jieming Zhou <qrsikno@gmail.com>");
+
