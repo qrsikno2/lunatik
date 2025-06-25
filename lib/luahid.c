@@ -52,52 +52,40 @@ static const lunatik_class_t luahid_class = {
 	.sleep = true,
 };
 
-/*
- * Helper function to safely get an integer field from a Lua table.
- */
-static lua_Integer luahid_get_int_field(lua_State *L, int table_idx, const char *field_name, lua_Integer default_val)
-{
-	lua_Integer result = default_val;
-	if (lua_getfield(L, table_idx, field_name) == LUA_TNUMBER)
-		result = lua_tointeger(L, -1);
-	lua_pop(L, 1);
-	return result;
-}
-
 static const struct hid_device_id *luahid_parse_id_table(lua_State *L, int idx)
 {
-	if (lua_getfield(L, idx, "id_table") != LUA_TTABLE) {
-		lua_pop(L, 1);
-		return luahid_table;
-	}
+	if (lua_getfield(L, idx, "id_table") != LUA_TTABLE) /* get the table into stack */
+		goto err;
 
 	size_t len = luaL_len(L, -1);
-	if (len == 0) {
-		lua_pop(L, 1);
-		return luahid_table;
-	}
+	if (len == 0)
+		goto err;
 
 	struct hid_device_id *user_table = lunatik_checkalloc(L, sizeof(struct hid_device_id) * (len + 1));
 
 	for (size_t i = 0; i < len; i++) {
-		if (lua_geti(L, -1, i + 1) != LUA_TTABLE) {
+		if (lua_geti(L, -1, i + 1) != LUA_TTABLE) { /* get the i-th entry of the table into stack */
 			lunatik_free(user_table);
 			luaL_error(L, "id_table entry #%zu is not a table", i + 1);
 		}
 
-		user_table[i].bus = luahid_get_int_field(L, -1, "bus", HID_BUS_ANY);
-		user_table[i].group = luahid_get_int_field(L, -1, "group", HID_GROUP_ANY);
-		user_table[i].vendor = luahid_get_int_field(L, -1, "vendor", HID_ANY_ID);
-		user_table[i].product = luahid_get_int_field(L, -1, "product", HID_ANY_ID);
-		user_table[i].driver_data = luahid_get_int_field(L, -1, "driver_data", 0);
+		struct hid_device_id *cur_id = &user_table[i];
+		lunatik_optinteger(L, 1, cur_id, bus, HID_BUS_ANY);
+		lunatik_optinteger(L, 1, cur_id, group, HID_GROUP_ANY);
+		lunatik_optinteger(L, 1, cur_id, vendor, HID_ANY_ID);
+		lunatik_optinteger(L, 1, cur_id, product, HID_ANY_ID);
+		lunatik_optinteger(L, 1, cur_id, driver_data, 0);
 
-		lua_pop(L, 1);
+		lua_pop(L, 1); /* pop the table entry */
 	}
 
 	memset(&user_table[len], 0, sizeof(struct hid_device_id));
-	lua_pop(L, 1);
+	lua_pop(L, 1); /* pop the id_table table */
 
 	return user_table;
+err:
+	lua_pop(L, 1);
+	return luahid_table;
 }
 
 static int luahid_register(lua_State *L)
@@ -105,21 +93,21 @@ static int luahid_register(lua_State *L)
 	luaL_checktype(L, 1, LUA_TTABLE);
 
 	lunatik_object_t *object = lunatik_newobject(L, &luahid_class, sizeof(luahid_t));
-	luahid_t *hidvar = (luahid_t *)object->private;
-	memset(hidvar, 0, sizeof(luahid_t));
+	luahid_t *hid = (luahid_t *)object->private;
+	memset(hid, 0, sizeof(luahid_t));
 
-	struct hid_driver *user_driver = &(hidvar->driver);
+	struct hid_driver *user_driver = &(hid->driver);
 	user_driver->name = lunatik_checkalloc(L, NAME_MAX);
 	lunatik_setstring(L, 1, user_driver, name, NAME_MAX);
 	user_driver->id_table = luahid_parse_id_table(L, 1);
 
-	lunatik_setruntime(L, hid, hidvar);
-	lunatik_getobject(hidvar->runtime);
+	lunatik_setruntime(L, hid, hid);
+	lunatik_getobject(hid->runtime);
 
 	if (__hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME) != 0)
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
 
-	hidvar->registered = true;
+	hid->registered = true;
 	lunatik_registerobject(L, 1, object);
 	return 1; /* object */
 }
