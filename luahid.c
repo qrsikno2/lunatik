@@ -3,6 +3,7 @@
 * SPDX-License-Identifier: MIT OR GPL-2.0-only
 */
 
+#include "asm/user_64.h"
 #include <string.h>
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/hid.h>
@@ -53,7 +54,7 @@ static const struct hid_device_id *luahid_setidtable(lua_State *L)
 	size_t len = luaL_len(L, -1);
 
 	user_table = lunatik_checkalloc(L, sizeof(struct hid_device_id) * (len + 1));
-	for (size_t i = 0; i < len; i++) {
+	for (struct hid_device_id *cur_id = user_table; i < len; i++) {
 		if (lua_geti(L, -1, i + 1) != LUA_TTABLE) { /* table entry */
 			lua_pop(L, 1); /* table entry */
 			lunatik_free(user_table);
