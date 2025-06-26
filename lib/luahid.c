@@ -12,6 +12,8 @@
 */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#include <linux/printk.h>
+#include <lua.h>
 #include <string.h>
 #include <linux/hid.h>
 #include <lunatik.h>
@@ -27,6 +29,7 @@
 */
 typedef struct luahid_s {
 	lunatik_object_t *runtime;
+	lunatik_object_t *devtable; /* table of devices's priv */
 	struct hid_driver driver;
 	bool registered;
 } luahid_t;
@@ -93,6 +96,75 @@ out:
 	return user_table;
 }
 
+static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id);
+
+static int luahid_probe_handler(lua_State *L, luahid_t *hid, struct hid_device *hdev, const struct hid_device_id *id) {
+	int ret = 0;
+
+	if (lunatik_getregistry(L, hid) != LUA_TTABLE) {
+		pr_err("Could not find the hid table");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (lua_getfield(L, -1, "init") != LUA_TFUNCTION) {
+		pr_warn("Init function is not specified");
+		ret = 0;
+		goto out;
+	}
+
+	lua_pushvalue(L, -2); /* driver table */
+	lua_newtable(L);
+	lua_pushinteger(L, id->bus); lua_setfield(L, -2, "bus");
+	lua_pushinteger(L, id->group); lua_setfield(L, -2, "group");
+	lua_pushinteger(L, id->vendor); lua_setfield(L, -2, "vendor");
+	lua_pushinteger(L, id->product); lua_setfield(L, -2, "product");
+	lua_pushinteger(L, id->driver_data); lua_setfield(L, -2, "driver_data");
+
+	if (lua_pcall(L, 2, 1, 0) != LUA_OK) {
+		pr_err("Failed to call init function: %s", lua_tostring(L, -1));
+		ret = -EFAULT;
+		goto out;
+	}
+
+	if (lua_type(L, -1) != LUA_TTABLE) {
+		pr_warn("No drvdata will be set.\n");
+		ret = 0;
+		goto out;
+	}
+
+	if (lunatik_getregistry(L, luahid_probe) != LUA_TTABLE) {
+		pr_err("Could not find the device table");
+		ret = -EFAULT;
+		goto out;
+	}
+
+	lua_pushlightuserdata(L, hdev);
+	lua_pushvalue(L, -3); /* driver table */
+	lua_settable(L, -3); /* hid_device_table[hdev] = driver table */
+
+	hid_set_drvdata(hdev, hid);
+out:
+	return ret;
+}
+
+static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
+{
+	struct hid_driver *driver = hdev->driver;
+	luahid_t *hid = container_of(driver, luahid_t, driver);
+	int ret;
+
+	lunatik_handle(hid->runtime, luahid_probe_handler, ret, hid, hdev, id);
+	if (ret)
+		return ret;
+
+	ret = hid_parse(hdev);
+	if (ret)
+		return ret;
+
+	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+}
+
 /***
 * Registers a new HID driver.
 * This function creates a new HID driver object from a Lua table and registers it with the kernel.
@@ -138,14 +210,20 @@ static int luahid_register(lua_State *L)
 	luaL_argcheck(L, (user_driver->id_table = luahid_setidtable(L, -1)) != NULL,
 			   2, "invaild id_table");
 
+	lua_newtable(L);
+	lunatik_setregistry(L, -1, luahid_probe);
+	user_driver->probe = luahid_probe;
+
 	lunatik_setruntime(L, hid, hid);
 	lunatik_getobject(hid->runtime);
+	lunatik_registerobject(L, 1, object);
 
-	if (__hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME) != 0)
+	if (__hid_register_driver(user_driver, THIS_MODULE, KBUILD_MODNAME) != 0) {
+		lunatik_unregisterobject(L, object);
 		luaL_error(L, "failed to register hid driver: %s", user_driver->name);
+	}
 
 	hid->registered = true;
-	lunatik_registerobject(L, 1, object);
 	return 1; /* object */
 }
 
