@@ -174,7 +174,7 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
 
-static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *buf, unsigned int *size, __u8 **ret_ptr)
+static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *buf, unsigned int *size)
 {
 	if (luahid_checkdriver(L, hid, -1, "_info") || lua_getfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
 		pr_err("report_fixup: couldn't find driver or the function\n");
@@ -209,11 +209,10 @@ static luahid_ret_t luahid_report_fixup(struct hid_device *hdev, __u8 *buf, unsi
 {
 	struct hid_driver *driver = hdev->driver;
 	luahid_t *hid = container_of(driver, luahid_t, driver);
-	__u8 *ret_ptr = buf;
 	int ret;
 
-	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, buf, size, &ret_ptr);
-	return ret ? buf : ret_ptr;
+	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, buf, size);
+	return buf;
 }
 
 /***
