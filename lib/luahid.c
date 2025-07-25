@@ -17,6 +17,8 @@
 #include <lunatik.h>
 #include <lauxlib.h>
 
+#include "luadata.h"
+
 /***
 * Represents a registered HID driver.
 * This is a userdata object returned by `hid.register()`. It encapsulates
@@ -109,6 +111,35 @@ static inline void luahid_pushdevid(lua_State *L, int idx, const struct hid_devi
 	luahid_setfield(L, -1, device_id, driver_data);
 }
 
+
+static inline void luahid_pushhdev(lua_State *L, struct hid_device *hdev)
+{
+	lua_newtable(L);
+	luahid_setfield(L, -1, hdev, bus);
+	luahid_setfield(L, -1, hdev, group);
+	luahid_setfield(L, -1, hdev, vendor);
+	luahid_setfield(L, -1, hdev, product);
+	luahid_setfield(L, -1, hdev, version);
+	lua_pushstring(L, hdev->name);
+	lua_setfield(L, -2, "name");
+}
+
+static inline void luahid_pushinfo(lua_State *L, int idx, struct hid_device *hdev)
+{
+	lua_pushlightuserdata(L, hdev);
+	lua_gettable(L, idx - 1);
+}
+
+static inline void luahid_pushreport(lua_State *L, struct hid_report *report)
+{
+	lua_newtable(L);
+	luahid_setfield(L, -1, report, id);
+	luahid_setfield(L, -1, report, type);
+	luahid_setfield(L, -1, report, size);
+	luahid_setfield(L, -1, report, application);
+	luahid_setfield(L, -1, report, maxfield);
+}
+
 #define luahid_checkdriver(L, hid, idx, field) (lunatik_getregistry(L, hid) != LUA_TTABLE || \
 	lua_getfield(L, idx, "ops") != LUA_TTABLE || lua_getfield(L, idx - 1, field) != LUA_TTABLE)
 
@@ -153,6 +184,46 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
 
+static int luahid_doraw_event(lua_State *L, luahid_t *hid, struct hid_device *hdev, struct hid_report *report, u8 *data, int size, int *ret)
+{
+	if (luahid_checkdriver(L, hid, -1, "_info")) {
+		pr_err("raw_event: couldn't find driver");
+		return -ENXIO;
+	}
+
+	if (lua_getfield(L, -2, "raw_event") != LUA_TFUNCTION)
+		return 0;
+
+	lua_pushvalue(L, -3);  /* hid.ops */
+	luahid_pushhdev(L, hdev);
+	luahid_pushinfo(L, -4, hdev);
+	luahid_pushreport(L, report);
+	lunatik_object_t *param_data = lunatik_checknull(L, luadata_new(data, size, hid->runtime->sleep, LUADATA_OPT_NONE));
+	lunatik_pushobject(L, param_data);/* raw data */
+
+	if (lua_pcall(L, 5, 1, 0) != LUA_OK) {
+		pr_err("raw_event: %s\n", lua_tostring(L, -1));
+		return -ECANCELED;
+	}
+
+	if (!lua_isboolean(L, -1))
+		return -EINVAL;
+
+	*ret = lua_toboolean(L, -1);
+	return 0;
+}
+
+static int luahid_raw_event(struct hid_device *hdev, struct hid_report *report, u8 *data, int size)
+{
+	struct hid_driver *driver = hdev->driver;
+	luahid_t *hid = container_of(driver, luahid_t, driver);
+	int ret_bool = 0;
+	int ret;
+
+	lunatik_run(hid->runtime, luahid_doraw_event, ret, hid, hdev, report, data, size, &ret_bool);
+	return ret ? false : ret_bool;
+}
+
 /***
 * Registers a new HID driver.
 * This function creates a new HID driver object from a Lua table and registers it with the kernel.
@@ -192,6 +263,11 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 *	 	return drvdata
 *	 end
 *
+*	 function hid_driver:raw_event(priv_data, report, raw_data)
+*	 	print("Raw event received for report ID:", report.id)
+*	 	return false
+*	 end
+*
 *	 hid.register(hid_driver)
 */
 static int luahid_register(lua_State *L)
@@ -217,6 +293,7 @@ static int luahid_register(lua_State *L)
 		      2, "invaild id_table");
 
 	user_driver->probe = luahid_probe;
+	user_driver->raw_event = luahid_raw_event;
 
 	lunatik_setruntime(L, hid, hid);
 	lunatik_getobject(hid->runtime);
