@@ -177,19 +177,19 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *buf, unsigned int *size)
 {
 	if (luahid_checkdriver(L, hid, -1, "_info") || lua_getfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
-		pr_err("report_fixup: couldn't find driver or the function\n");
+		pr_err("report_fixup: invaild driver\n");
 		return -ENXIO;
 	}
 
 	lua_pushvalue(L, -3); /* hid.ops */
 	luahid_pushhdev(L, hdev);
 	luahid_pushinfo(L, -4, hdev);
-	lunatik_object_t *original_data = luadata_new(buf, *size, hid->runtime->sleep, LUADATA_OPT_NONE);
-	if (!original_data) {
-		pr_err("report_fixup: failed to create original data object\n");
+	lunatik_object_t *descriptor = luadata_new(buf, *size, hid->runtime->sleep, LUADATA_OPT_NONE);
+	if (!descriptor) {
+		pr_err("report_fixup: failed to create the buffer of descriptor\n");
 		return -ENOMEM;
 	}
-	lunatik_pushobject(L, original_data);
+	lunatik_pushobject(L, descriptor);
 
 	if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
 		pr_err("report_fixup: %s\n", lua_tostring(L, -1));
@@ -202,7 +202,7 @@ static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
 typedef const __u8* luahid_ret_t;
 #else
-typedef  __u8* luahid_ret_t;
+typedef __u8* luahid_ret_t;
 #endif
 
 static luahid_ret_t luahid_report_fixup(struct hid_device *hdev, __u8 *buf, unsigned int *size)
