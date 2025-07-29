@@ -174,7 +174,7 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
 
-static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *buf, unsigned int *size)
+static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize)
 {
 	if (luahid_checkdriver(L, hid, -1, "_info") || lua_getfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
 		pr_err("report_fixup: invaild driver\n");
@@ -184,7 +184,7 @@ static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device 
 	lua_pushvalue(L, -3); /* hid.ops */
 	luahid_pushhdev(L, hdev);
 	luahid_pushinfo(L, -4, hdev);
-	lunatik_object_t *descriptor = luadata_new(buf, *size, hid->runtime->sleep, LUADATA_OPT_NONE);
+	lunatik_object_t *descriptor = luadata_new(rdesc, *rsize, hid->runtime->sleep, LUADATA_OPT_NONE);
 	if (!descriptor) {
 		pr_err("report_fixup: failed to create the buffer of descriptor\n");
 		return -ENOMEM;
@@ -195,7 +195,6 @@ static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device 
 		pr_err("report_fixup: %s\n", lua_tostring(L, -1));
 		return -ECANCELED;
 	}
-
 	return 0;
 }
 
@@ -205,14 +204,14 @@ typedef const __u8* luahid_ret_t;
 typedef __u8* luahid_ret_t;
 #endif
 
-static luahid_ret_t luahid_report_fixup(struct hid_device *hdev, __u8 *buf, unsigned int *size)
+static luahid_ret_t luahid_report_fixup(struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize)
 {
 	struct hid_driver *driver = hdev->driver;
 	luahid_t *hid = container_of(driver, luahid_t, driver);
 	int ret;
 
-	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, buf, size);
-	return buf;
+	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, rdesc, rsize);
+	return rdesc;
 }
 
 /***
