@@ -174,7 +174,7 @@ static int luahid_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 }
 
-static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize)
+static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *rdesc, unsigned int *rsize, __u8 **nptr)
 {
 	if (luahid_checkdriver(L, hid, -1, "_info") || lua_getfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
 		pr_err("report_fixup: invaild driver\n");
@@ -191,10 +191,17 @@ static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device 
 	}
 	lunatik_pushobject(L, descriptor);
 
-	if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+	if (lua_pcall(L, 4, 1, 0) != LUA_OK) {
 		pr_err("report_fixup: %s\n", lua_tostring(L, -1));
 		return -ECANCELED;
 	}
+
+	if (!luadata_isdata(L, -1)) {
+		pr_warn("report_fixup: invaild report descriptor");
+		return -EINVAL;
+	}
+	*nptr = (__u8 *)luadata_getptr(L, -1);
+	*rsize = luadata_getsize(L, -1);
 	return 0;
 }
 
@@ -208,10 +215,11 @@ static luahid_ret_t luahid_report_fixup(struct hid_device *hdev, __u8 *rdesc, un
 {
 	struct hid_driver *driver = hdev->driver;
 	luahid_t *hid = container_of(driver, luahid_t, driver);
+	__u8 *nptr = rdesc;
 	int ret;
 
-	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, rdesc, rsize);
-	return rdesc;
+	lunatik_run(hid->runtime, luahid_doreport_fixup, ret, hid, hdev, rdesc, rsize, &nptr);
+	return ret ? rdesc : nptr;
 }
 
 /***

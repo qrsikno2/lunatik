@@ -403,6 +403,30 @@ int luadata_reset(lunatik_object_t *object, void *ptr, size_t size, uint8_t opt)
 }
 EXPORT_SYMBOL(luadata_reset);
 
+int luadata_isdata(lua_State *L, int idx)
+{
+	if (lunatik_isobject(L, idx)) {
+		lunatik_object_t *object = lunatik_toobject(L, idx);
+		return object->class == &luadata_class;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(luadata_isdata);
+
+void *luadata_getptr(lua_State *L, int ix)
+{
+	luadata_t *data = luadata_check(L, ix);
+	return data->ptr;
+}
+EXPORT_SYMBOL(luadata_getptr);
+
+size_t luadata_getsize(lua_State *L, int ix)
+{
+	luadata_t *data = luadata_check(L, ix);
+	return data->size;
+}
+EXPORT_SYMBOL(luadata_getsize);
+
 static int __init luadata_init(void)
 {
 	return 0;
