@@ -351,5 +351,13 @@ static inline void lunatik_unregisterobject(lua_State *L, lunatik_object_t *obje
 	lua_pop(L, 1); /* pop nil */
 }
 
+#define lunatik_newbuffer(L, obj, field)		\
+do {							\
+	obj->field = lunatik_checknull(L, luadata_new(NULL, 0, false, LUADATA_OPT_NONE));	\
+	lunatik_cloneobject(L, obj->field);		\
+	lunatik_setregistry(L, -1, obj->field);	\
+	lua_pop(L, 1); /* skb */			\
+} while (0)
+
 #endif
 

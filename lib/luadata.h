@@ -6,8 +6,6 @@
 #ifndef luadata_h
 #define luadata_h
 
-#include <lunatik.h>
-
 LUNATIK_LIB(data);
 
 #define	LUADATA_OPT_NONE	0x00
