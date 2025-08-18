@@ -11,6 +11,7 @@
 * @module hid
 */
 
+#include "lua.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/version.h>
 #include <linux/string.h>
@@ -99,9 +100,8 @@ out:
 
 #define luahid_setfield(L, idx, obj, field)					\
 do { 										\
-	lua_pushstring(L, #field);						\
-	lua_pushinteger(L, (obj)->field);					\
-	lua_rawset(L, idx - 2);							\
+	lua_pushinteger(L, obj->field); 					\
+	lua_setfield(L, idx - 1, #field);					\
 } while (0)
 
 #define luahid_pcall(L, func, arg) 					\
@@ -115,7 +115,7 @@ do { 									\
 	} 								\
 } while (0)
 
-static inline int luahid_safegetfield(lua_State *L, int idx, const char *fieldname)
+static inline int luahid_getfield(lua_State *L, int idx, const char *fieldname)
 {
 	lua_pushstring(L, fieldname);
 	return lua_rawget(L, idx - 1);
@@ -166,7 +166,7 @@ static inline int luahid_pushreport(lua_State *L)
 }
 
 #define luahid_checkdriver(L, hid, idx, field) (lunatik_getregistry(L, hid) != LUA_TTABLE || \
-	luahid_safegetfield(L, idx, "ops") != LUA_TTABLE || luahid_safegetfield(L, idx - 1, field) != LUA_TTABLE)
+	luahid_getfield(L, idx, "ops") != LUA_TTABLE || luahid_getfield(L, idx - 1, field) != LUA_TTABLE)
 
 static int luahid_doprobe(lua_State *L, luahid_t *hid, struct hid_device *hdev, const struct hid_device_id *id)
 {
@@ -175,7 +175,7 @@ static int luahid_doprobe(lua_State *L, luahid_t *hid, struct hid_device *hdev, 
 		return -ENXIO;
 	}
 
-	if (luahid_safegetfield(L, -2, "probe") != LUA_TFUNCTION)
+	if (luahid_getfield(L, -2, "probe") != LUA_TFUNCTION)
 		return 0;
 
 	lua_pushvalue(L, -3); /* hid.ops */
@@ -221,7 +221,7 @@ static inline lunatik_object_t *luahid_getdescriptor(lua_State *L, luahid_t *hid
 
 static int luahid_doreport_fixup(lua_State *L, luahid_t *hid, struct hid_device *hdev, __u8 *rdesc, unsigned int rsize)
 {
-	if (luahid_checkdriver(L, hid, -1, "_info") || luahid_safegetfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
+	if (luahid_checkdriver(L, hid, -1, "_info") || luahid_getfield(L, -2, "report_fixup") != LUA_TFUNCTION) {
 		pr_warn("report_fixup: invaild driver\n");
 		goto out;
 	}
@@ -268,7 +268,7 @@ static int luahid_doraw_event(lua_State *L, luahid_t *hid, struct hid_device *hd
 		return -ENXIO;
 	}
 
-	if (luahid_safegetfield(L, -2, "raw_event") != LUA_TFUNCTION)
+	if (luahid_getfield(L, -2, "raw_event") != LUA_TFUNCTION)
 		return 0;
 
 	lua_pushvalue(L, -3);  /* hid.ops */
