@@ -97,6 +97,13 @@ out:
 	return user_table;
 }
 
+#define luahid_setfield(L, idx, obj, field)					\
+do { 										\
+	lua_pushstring(L, #field);						\
+	lua_pushinteger(L, (obj)->field);					\
+	lua_rawset(L, idx - 2);							\
+} while (0)
+
 #define luahid_pcall(L, func, arg) 					\
 do { 									\
 	int n = lua_gettop(L); 						\
@@ -113,13 +120,6 @@ static inline int luahid_safegetfield(lua_State *L, int idx, const char *fieldna
 	lua_pushstring(L, fieldname);
 	return lua_rawget(L, idx - 1);
 }
-
-#define luahid_setfield(L, idx, obj, field)					\
-do { 										\
-	lua_pushstring(L, #field);						\
-	lua_pushinteger(L, (obj)->field);					\
-	lua_rawset(L, idx - 2);							\
-} while (0)
 
 #define luahid_newtable(L, dev, extra)			\
 do { 							\
