@@ -11,7 +11,6 @@
 * @module hid
 */
 
-#include "lua.h"
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 #include <linux/version.h>
 #include <linux/string.h>
